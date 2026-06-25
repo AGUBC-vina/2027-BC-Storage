@@ -276,7 +276,9 @@ def run_one_method(method: str, boreholes):
 
 
 def main():
-    methods = ["single", "three-zone"]
+    # Only the three-zone tessellation is analyzed by the dashboard; pass
+    # "single" explicitly if you still want the retired basin-wide Sy CSV.
+    methods = ["three-zone"]
     if len(sys.argv) > 1 and sys.argv[1] in POLY_VAR_BY_METHOD:
         methods = [sys.argv[1]]
     ensure_svsim_csv()

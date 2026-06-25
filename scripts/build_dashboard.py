@@ -58,7 +58,11 @@ POLY_JS_BY_METHOD = {
 }
 WELLS_JS = REF_REPO / "js" / "wells-data.js"
 MEAS_JS  = REF_REPO / "js" / "measurements-data.js"
-METHODS = ["single", "three-zone"]
+# Only the three-zone (per-management-area) tessellation is analyzed.  The
+# single basin-wide tessellation was retired 2026-05 — the three management
+# areas carry distinct sustainable management criteria, so cells must not
+# cross management-area lines.
+METHODS = ["three-zone"]
 METHOD_LABEL = {
     "single":     "Single basin-wide tessellation",
     "three-zone": "Three-zone (per management area) tessellation",
@@ -183,6 +187,24 @@ def well_spring_year(well_name: str, recs):
     return {y: statistics.fmean(v) for y, v in by_year.items() if v}
 
 
+def well_ground_surface_elev(recs):
+    """Ground-surface elevation (ft msl) for a well = median(gwe + dtw) over
+    Good records.  gwe is the water-surface elevation and dtw the depth to
+    water below ground, so their sum is the (stable) ground elevation.  Used
+    to convert displayed levels between ft msl and ft below ground (BGS)."""
+    vals = []
+    for r in recs:
+        qa = (r.get("qa") or "").strip().lower()
+        if "good" not in qa:
+            continue
+        gwe = r.get("gwe")
+        dtw = r.get("dtw")
+        if gwe is None or dtw is None:
+            continue
+        vals.append(float(gwe) + float(dtw))
+    return statistics.median(vals) if vals else None
+
+
 def polygon_annual_gwe(well_year_maps):
     yset = set()
     for m in well_year_maps:
@@ -257,23 +279,40 @@ def load_sy(csv_path: Path, polygons_meta: list) -> dict:
 
 
 # --- color ramp -----------------------------------------------------------
-def loss_color(loss_rate_afy: float) -> str:
-    """Color a polygon by its avg observed loss rate (AF/yr).
+# Five continuous bands keyed on a polygon's AVERAGE NORMALIZED STORAGE RATE
+# (AF/yr, signed: positive = gaining, negative = losing).  Boundaries are
+# UPPER-BOUND INCLUSIVE (each band is lower-exclusive, upper-inclusive), so a
+# value of exactly -100 falls in the light-green band, exactly -250 in light
+# yellow, exactly -750 in orange, and exactly 0 in medium green.
+RATE_BANDS = [
+    ("> 0",            "#2e6f3f"),   # dark green   — gaining storage
+    ("0 to −100",        "#6b9479"),   # medium green
+    ("−100 to −250",       "#b9d3bf"),   # light green
+    ("−250 to −750",       "#f0d9a8"),   # light yellow
+    ("< −750",          "#df8a3c"),   # orange       — fastest loss
+]
 
-    loss_rate_afy is the *positive* loss magnitude (hold-steady need): 0 means
-    the polygon is gaining storage, larger means losing faster.
+
+def rate_color(norm_rate_afy: float) -> str:
+    """Color a polygon by its average normalized storage rate (AF/yr).
+
+    Signed: positive = gaining storage, negative = losing.  Bands are
+    upper-bound inclusive (see RATE_BANDS):
+        r  >    0   -> dark green
+       -100 < r <= 0   -> medium green
+       -250 < r <= -100 -> light green
+       -750 < r <= -250 -> light yellow
+              r <= -750 -> orange
     """
-    if loss_rate_afy <= 0:
-        return "#a8c8b0"   # gaining storage
-    if loss_rate_afy < 250:
-        return "#f0d9a8"   # near-zero loss
-    if loss_rate_afy < 750:
-        return "#e3a76f"
-    if loss_rate_afy < 1500:
-        return "#cb7740"
-    if loss_rate_afy < 2500:
-        return "#a84a2c"
-    return "#7c2820"       # severe loss
+    if norm_rate_afy > 0:
+        return RATE_BANDS[0][1]
+    if norm_rate_afy > -100:
+        return RATE_BANDS[1][1]
+    if norm_rate_afy > -250:
+        return RATE_BANDS[2][1]
+    if norm_rate_afy > -750:
+        return RATE_BANDS[3][1]
+    return RATE_BANDS[4][1]
 
 
 # --- SVG projection -------------------------------------------------------
@@ -391,8 +430,9 @@ def render_bar_chart(buckets, n_by_type, basin_net, n_polygons):
 # --- cumulative time series chart -----------------------------------------
 def render_timeseries(ts, ts_normalized=None, n_polygons=None):
     """`ts` is the observed time series.  `ts_normalized` is the optional
-    year-type-weighted backcast series — drawn as a second line if provided."""
-    width, height = 760, 380
+    year-type-weighted backcast series — drawn as a second line if provided.
+    The legend sits BELOW the plot area so it never covers the lines."""
+    width, height = 760, 432
     plot_x0, plot_y0 = 92, 32
     plot_x1, plot_y1 = 736, 324
     out = []
@@ -470,32 +510,33 @@ def render_timeseries(ts, ts_normalized=None, n_polygons=None):
                    f'text-anchor="end" font-size="11" font-weight="700" fill="#7c4a86">'
                    f'{last_n["cumulative_AF"]:+,.0f} AF (normalized)</text>')
 
-    legend_w = 320
-    legend_h = 132 if ts_normalized else 102
-    legend_x = plot_x0 + 8
-    legend_y = plot_y1 - legend_h - 6
-    out.append(f'<g transform="translate({legend_x},{legend_y + 22})">')
-    out.append(f'<rect x="-8" y="-22" width="{legend_w}" height="{legend_h}" fill="#fafaf7" fill-opacity="0.92" stroke="#cfc9b8" stroke-width="0.5" rx="2"/>')
-    out.append('<line x1="0" y1="-10" x2="22" y2="-10" stroke="#1f3a5f" stroke-width="2.4"/>')
-    out.append('<text x="28" y="-7" font-size="11" fill="#1a1612"><tspan font-weight="700">Observed</tspan> (years each polygon measured)</text>')
-    swatch_y = 2
+    # --- legend BELOW the plot area (never overlaps the lines) -------------
+    # Row 1: the two series lines.  Row 2: the hydrologic-condition shade key.
+    row1_y = plot_y1 + 40
+    out.append(f'<line x1="{plot_x0}" y1="{row1_y - 4}" x2="{plot_x0 + 22}" y2="{row1_y - 4}" stroke="#1f3a5f" stroke-width="2.4"/>')
+    out.append(f'<text x="{plot_x0 + 28}" y="{row1_y}" font-size="11" fill="#1a1612">'
+               '<tspan font-weight="700">Observed</tspan> (years each polygon measured)</text>')
     if ts_normalized:
-        out.append(f'<line x1="0" y1="{swatch_y+5}" x2="22" y2="{swatch_y+5}" stroke="#7c4a86" stroke-width="2.0" stroke-dasharray="6,4"/>')
-        out.append(f'<text x="28" y="{swatch_y+9}" font-size="11" fill="#1a1612"><tspan font-weight="700">Normalized</tspan> (year-type-weighted backcast)</text>')
-        swatch_y += 18
+        nx = plot_x0 + 300
+        out.append(f'<line x1="{nx}" y1="{row1_y - 4}" x2="{nx + 22}" y2="{row1_y - 4}" stroke="#7c4a86" stroke-width="2.0" stroke-dasharray="6,4"/>')
+        out.append(f'<text x="{nx + 28}" y="{row1_y}" font-size="11" fill="#1a1612">'
+                   '<tspan font-weight="700">Normalized</tspan> (year-type-weighted backcast)</text>')
+
+    row2_y = plot_y1 + 62
+    out.append(f'<text x="{plot_x0}" y="{row2_y}" font-size="11" fill="#5b5547" font-weight="600">Hydrologic condition shading:</text>')
+    cond_x = plot_x0 + 168
     for full, color, opacity in [
-        ("Critical",      "#a32d2d", 0.32),
-        ("Dry",           "#c75a35", 0.26),
-        ("Below Normal",  "#d99a4f", 0.20),
+        ("Critical",       "#a32d2d", 0.32),
+        ("Dry",            "#c75a35", 0.26),
+        ("Below Normal",   "#d99a4f", 0.20),
         ("Wet / Above N.", None,     0),
     ]:
         if color:
-            out.append(f'<rect x="0" y="{swatch_y}" width="22" height="10" fill="{color}" fill-opacity="{opacity}"/>')
+            out.append(f'<rect x="{cond_x}" y="{row2_y - 9}" width="20" height="11" fill="{color}" fill-opacity="{opacity}"/>')
         else:
-            out.append(f'<rect x="0" y="{swatch_y}" width="22" height="10" fill="#fafaf7" stroke="#cfc9b8" stroke-width="0.5"/>')
-        out.append(f'<text x="28" y="{swatch_y+9}" font-size="11" fill="#1a1612">{full}</text>')
-        swatch_y += 16
-    out.append('</g>')
+            out.append(f'<rect x="{cond_x}" y="{row2_y - 9}" width="20" height="11" fill="#fafaf7" stroke="#cfc9b8" stroke-width="0.5"/>')
+        out.append(f'<text x="{cond_x + 25}" y="{row2_y}" font-size="11" fill="#1a1612">{full}</text>')
+        cond_x += 25 + (len(full) * 6.0) + 16
     out.append("</svg>")
     return "\n".join(out)
 
@@ -574,9 +615,9 @@ def render_polygon_map(polygons_meta, pol_summaries, well_lookup, sy_lookup,
         '.legend-bg{fill:#fafaf7;fill-opacity:0.97;stroke:#cfc9b8;stroke-width:0.6;}'
         '</style></defs>',
         f'<text class="title" x="{width/2}" y="18">'
-        f'Vina 2027 BC RMS network ({len(polygons_meta)} polygons) — Observed avg storage loss rate (AF/yr)</text>',
+        f'Vina 2027 BC RMS network ({len(polygons_meta)} polygons) — Avg normalized storage rate (AF/yr)</text>',
         f'<text class="subtitle" x="{width/2}" y="32">'
-        'Click any polygon for detail. Color = polygon avg loss rate (positive = losing storage).</text>',
+        'Click any polygon for detail. Color = polygon avg normalized storage rate (negative = losing storage).</text>',
     ]
 
     summary_by_zone = {s["zone_label"]: s for s in pol_summaries}
@@ -584,7 +625,7 @@ def render_polygon_map(polygons_meta, pol_summaries, well_lookup, sy_lookup,
         zone = poly["zone_label"]
         s = summary_by_zone[zone]
         d_attr = rings_to_path(poly["rings"], proj)
-        fill = loss_color(s["hold_steady_need_AF_per_yr"])
+        fill = rate_color(s["normalized_avg_rate_AF_per_yr"])
         late_baseline = s["baseline_year"] > START_YEAR
         attrs = {
             "class": "poly",
@@ -621,34 +662,42 @@ def render_polygon_map(polygons_meta, pol_summaries, well_lookup, sy_lookup,
     for poly in polygons_meta:
         zone = poly["zone_label"]
         s = summary_by_zone[zone]
+        well_xy = None
         for wname in s["rms_wells_2026"]:
             wmeta = well_lookup.get(wname)
             if not wmeta or wmeta.get("latitude") is None:
                 continue
             cx, cy = proj(wmeta["latitude"], wmeta["longitude"])
+            if well_xy is None:
+                well_xy = (cx, cy)
             svg.append(f'<circle class="well" cx="{cx:.1f}" cy="{cy:.1f}" r="3.0"/>')
-        lat_c, lon_c = polygon_centroid(poly["rings"])
-        cx, cy = proj(lat_c, lon_c)
+        # Anchor the label at the RMS well (not the centroid) for single-well
+        # polygons — reassigned cells (20K, 09B) wrap across Chico, so their
+        # centroid lands in the middle of Chico.  Chico aggregate uses centroid.
+        if not poly.get("is_aggregate") and well_xy is not None:
+            cx, cy = well_xy
+        else:
+            lat_c, lon_c = polygon_centroid(poly["rings"])
+            cx, cy = proj(lat_c, lon_c)
         # Show the section-letter shorthand to keep labels readable.
-        section_label = zone[6:11] if len(zone) >= 11 else zone
+        section_label = "Chico" if poly.get("is_aggregate") else (zone[6:11] if len(zone) >= 11 else zone)
         svg.append(f'<text class="label" x="{cx:.1f}" y="{cy:.1f}">{section_label}</text>')
 
     # Legend
     legend_x, legend_y = 16, height - 90
     legend_swatches = [
-        ("Gaining",        "#a8c8b0"),
-        ("Loss < 250",     "#f0d9a8"),
-        ("Loss < 750",     "#e3a76f"),
-        ("Loss < 1,500",   "#cb7740"),
-        ("Loss < 2,500",   "#a84a2c"),
-        ("Loss ≥ 2,500",   "#7c2820"),
+        ("> 0",          RATE_BANDS[0][1]),
+        ("0 to −100",      RATE_BANDS[1][1]),
+        ("−100 to −250",     RATE_BANDS[2][1]),
+        ("−250 to −750",     RATE_BANDS[3][1]),
+        ("< −750",        RATE_BANDS[4][1]),
     ]
-    swatch_w, col_w = 60, 82
+    swatch_w, col_w = 72, 94
     legend_w = 8 + col_w * len(legend_swatches) + 175
     svg.append(f'<g transform="translate({legend_x},{legend_y})">')
     svg.append(f'<rect class="legend-bg" x="-8" y="-22" width="{legend_w}" height="86"/>')
-    svg.append('<text class="legend-title" x="0" y="-6">Polygon avg observed storage loss rate (AF/yr)</text>')
-    svg.append('<text class="legend-text" x="0" y="9" font-style="italic" font-size="9.5" fill="#5b5547">light green = gaining storage  ·  oranges → reds = loss magnitude per year</text>')
+    svg.append('<text class="legend-title" x="0" y="-6">Polygon avg normalized storage rate (AF/yr)</text>')
+    svg.append('<text class="legend-text" x="0" y="9" font-style="italic" font-size="9.5" fill="#5b5547">dark green = gaining storage  ·  greens → yellow → orange = loss rate per year</text>')
     swatch_y = 18
     for i, (label, color) in enumerate(legend_swatches):
         sx = i * col_w + (col_w - swatch_w) / 2
@@ -681,11 +730,23 @@ def compute_method(method, wells_meta, meas, portfolio):
 
     sy_csv = DATA_DIR / f"polygon_sy_svsim_{suffix}.csv"
     sy_svsim_set = set()
+    borehole_counts = {}   # zone -> (n_boreholes_in_polygon, n_with_>=200ft_valid)
     if sy_csv.exists():
         with sy_csv.open() as f:
             for row in csv.DictReader(f):
                 if row.get("sy"):
                     sy_svsim_set.add(row["zone_label"])
+                try:
+                    borehole_counts[row["zone_label"]] = (
+                        int(row.get("n_boreholes_in_polygon") or 0),
+                        int(row.get("n_boreholes_with_>=200ft_valid") or 0),
+                    )
+                except (ValueError, TypeError):
+                    borehole_counts[row["zone_label"]] = (0, 0)
+    # Total boreholes within the basin (sum across all polygons) — used to
+    # frame the Sy methodology ("derived from N real boreholes, not assigned").
+    total_boreholes_basin = sum(n for n, _ in borehole_counts.values())
+    total_boreholes_valid = sum(v for _, v in borehole_counts.values())
     sy_lookup = load_sy(sy_csv, polygons)
 
     project_by_zone = {p["polygon"]: p for p in portfolio.get("projects", [])}
@@ -720,11 +781,15 @@ def compute_method(method, wells_meta, meas, portfolio):
             rms_wells = poly["rms_wells_2026"]
         well_year_maps = []
         per_well_summary = []
+        gse_vals = []
         for wname in rms_wells:
             site = site_by_name.get(wname, wname)
             recs = meas.get(site, [])
             ymap = well_spring_year(wname, recs)
             well_year_maps.append(ymap)
+            gse_w = well_ground_surface_elev(recs)
+            if gse_w is not None:
+                gse_vals.append(gse_w)
             per_well_summary.append({
                 "well_name": wname,
                 "site_code": site,
@@ -732,6 +797,9 @@ def compute_method(method, wells_meta, meas, portfolio):
                 "earliest_year": min(ymap) if ymap else None,
                 "latest_year": max(ymap) if ymap else None,
             })
+        # Representative ground-surface elevation for the polygon (mean across
+        # its wells).  depth-below-ground = gse_p − GWE.
+        gse_p = statistics.fmean(gse_vals) if gse_vals else None
         annual = polygon_annual_gwe(well_year_maps)
         annual_in_window = {y: v for y, v in annual.items()
                             if START_YEAR <= y <= END_YEAR}
@@ -826,8 +894,11 @@ def compute_method(method, wells_meta, meas, portfolio):
             "span_years": span_years,
             "baseline_gwe": baseline_gwe,
             "endpoint_gwe": endpoint_gwe,
+            "gse": round(gse_p, 1) if gse_p is not None else None,
             "sy": round(sy_p, 4),
             "sy_source": "SVSim" if zone in sy_svsim_set else "basin-mean fallback",
+            "n_boreholes": borehole_counts.get(zone, (0, 0))[0],
+            "n_boreholes_valid": borehole_counts.get(zone, (0, 0))[1],
             "endpoint_cum_storage_AF": round(endpoint_cum, 0),
             "avg_dgwe_ft_per_yr": round(avg_dgwe, 3),
             "avg_rate_AF_per_yr": round(avg_rate, 1),
@@ -1088,13 +1159,18 @@ def compute_method(method, wells_meta, meas, portfolio):
             "span_years": s["span_years"],
             "baseline_gwe": round(s["baseline_gwe"], 2),
             "endpoint_gwe": round(s["endpoint_gwe"], 2) if s["endpoint_gwe"] is not None else None,
+            "gse": s["gse"],
             "avg_dgwe": s["avg_dgwe_ft_per_yr"],
             "sy": s["sy"],
             "sy_source": s["sy_source"],
+            "n_boreholes": s["n_boreholes"],
+            "n_boreholes_valid": s["n_boreholes_valid"],
             "cum_2025": s["endpoint_cum_storage_AF"],
             "avg_rate": s["avg_rate_AF_per_yr"],
             "norm_cum": s["normalized_cum_2025_AF"],
             "norm_avg": s["normalized_avg_rate_AF_per_yr"],
+            "rate_per_bucket": s["rate_per_bucket_AF_per_yr"],
+            "bucket_years": s["bucket_polygon_years"],
             "buckets": s["bucket_storage_AF"],
             "crit_dry_share": s["crit_dry_share_of_drawdown_pct"],
             "crit_share": s["crit_share_of_drawdown_pct"],
@@ -1106,7 +1182,7 @@ def compute_method(method, wells_meta, meas, portfolio):
             "rings": p_meta.get("rings", []),
             "seed_latlng": seed_latlng,
             "well_latlngs": well_latlngs,
-            "fill_color": loss_color(s["hold_steady_need_AF_per_yr"]),
+            "fill_color": rate_color(s["normalized_avg_rate_AF_per_yr"]),
         })
 
     # Per-method console summary
@@ -1153,6 +1229,8 @@ def compute_method(method, wells_meta, meas, portfolio):
         "n_by_type_full": N_BY_TYPE_FULL,
         "project_total_afy": project_total_afy,
         "polygons_for_js": polygons_for_js,
+        "total_boreholes_basin": total_boreholes_basin,
+        "total_boreholes_valid": total_boreholes_valid,
     }
 
 

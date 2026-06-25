@@ -1,12 +1,11 @@
 #!/usr/bin/env python3
 """
 Single-file index.html generator for the 2027 BC drought-storage
-dashboard.  Builds two method-specific content sections (single basin-wide
-tessellation + three-zone per-management-area tessellation) and wires up a
-toggle UI at the top to switch between them.
+dashboard.  Renders the three-zone (per-management-area) tessellation
+analysis only — the single basin-wide tessellation was retired 2026-05.
 
 Called by scripts/build_dashboard.py with a `results_by_method` dict
-keyed by 'single' and 'three-zone'.
+keyed by 'three-zone'.
 """
 
 from __future__ import annotations
@@ -115,7 +114,13 @@ tr:hover td { background: #f9f6ee; }
 .bigstat .desc { flex: 1 1 280px; font-size: 14px; color: var(--ink); line-height: 1.55; }
 .map-wrap { position: relative; }
 .leaflet-map { width: 100%; height: 900px; border: 1px solid var(--rule); background: #fafaf7; border-radius: 2px; }
-.leaflet-map .polygon-label { font-family: 'Inter', sans-serif; font-size: 9.5px; font-weight: 600; color: #332e22; text-align: center; text-shadow: 0 0 2px rgba(255,255,255,0.85), 0 0 2px rgba(255,255,255,0.85); pointer-events: none; line-height: 1; white-space: nowrap; }
+.leaflet-map .polygon-label-wrap { display: flex; align-items: center; justify-content: center; pointer-events: none; }
+.leaflet-map .polygon-label { font-family: 'Inter', sans-serif; text-align: center; pointer-events: none; line-height: 1.18; white-space: nowrap; background: rgba(255,255,255,0.84); border: 0.5px solid rgba(91,85,71,0.4); border-radius: 3px; padding: 1px 4px; }
+.leaflet-map .polygon-label .pl-name { display: block; font-size: 9px; font-weight: 700; color: #332e22; }
+.leaflet-map .polygon-label .pl-rate { display: block; font-size: 8.5px; font-weight: 700; font-variant-numeric: tabular-nums; }
+.leaflet-map .polygon-label .pl-rate.gain { color: #2e6f3f; }
+.leaflet-map .polygon-label .pl-rate.loss { color: #a32d2d; }
+.leaflet-map .polygon-label .pl-rate.zero { color: #5b5547; }
 .map-toolbar { display: flex; flex-wrap: wrap; gap: 16px; padding: 10px 14px; margin: 10px 0 4px 0; background: var(--bg-card); border: 1px solid var(--rule); border-radius: 4px; font-family: 'Inter', sans-serif; font-size: 12px; align-items: center; }
 .map-toolbar-label { font-weight: 700; font-size: 11px; text-transform: uppercase; letter-spacing: 0.05em; color: var(--ink-muted); }
 .map-toggle { display: inline-flex; align-items: center; gap: 6px; cursor: pointer; color: var(--ink); user-select: none; }
@@ -167,6 +172,23 @@ tr:hover td { background: #f9f6ee; }
 .leaflet-popup-content .popup-need { background: #ecf3ed; padding: 10px 12px; margin-top: 10px; border-radius: 3px; font-size: 13px; line-height: 1.4; border-left: 3px solid var(--good); }
 .leaflet-popup-content .popup-need .big { font-size: 22px; font-weight: 800; display: block; margin-top: 2px; }
 .leaflet-popup-content .popup-late { background: #faf1dc; color: #6e5615; padding: 8px 10px; margin-top: 10px; border-radius: 3px; font-size: 12px; line-height: 1.4; }
+.leaflet-popup-content .popup-formula { background: #f4f1e6; border: 1px solid #e0d9c4; border-radius: 3px; padding: 8px 10px; margin: 8px 0; font-family: 'JetBrains Mono', ui-monospace, monospace; font-size: 11.5px; line-height: 1.55; color: var(--ink); }
+.leaflet-popup-content .popup-formula .gain { color: var(--good); }
+.leaflet-popup-content .popup-formula .loss { color: var(--warn); }
+.leaflet-popup-content .popup-rate { background: #eef2f6; border-left: 3px solid #1f3a5f; padding: 8px 10px; margin-top: 8px; border-radius: 3px; }
+.leaflet-popup-content .popup-rate .big { font-size: 20px; font-weight: 800; display: block; margin-top: 2px; }
+.leaflet-popup-content .popup-rate .gain { color: var(--good); }
+.leaflet-popup-content .popup-rate .loss { color: var(--warn); }
+.leaflet-popup-content .popup-note { font-size: 11.5px; color: #5b5547; line-height: 1.4; margin: 6px 0; }
+.leaflet-popup-content .popup-calc { width: 100%; border-collapse: collapse; margin: 6px 0; font-size: 11px; font-variant-numeric: tabular-nums; }
+.leaflet-popup-content .popup-calc th { text-align: right; font-weight: 600; color: #5b5547; padding: 2px 4px; border-bottom: 1px solid #e0d9c4; }
+.leaflet-popup-content .popup-calc th:first-child { text-align: left; }
+.leaflet-popup-content .popup-calc td { text-align: right; padding: 2px 4px; border-bottom: 1px dashed #ece6d6; }
+.leaflet-popup-content .popup-calc td:first-child { text-align: left; color: var(--ink); }
+.leaflet-popup-content .popup-calc tr.total td { border-top: 1.5px solid #cfc9b8; border-bottom: none; font-weight: 700; padding-top: 4px; }
+.leaflet-popup-content .popup-calc .gain { color: var(--good); }
+.leaflet-popup-content .popup-calc .loss { color: var(--warn); }
+.leaflet-popup-content .popup-calc .fb { color: #8a5a18; font-style: italic; }
 
 table tr[data-zone-label] { cursor: pointer; }
 table tr[data-zone-label]:hover td { background: #fff1cc; }
@@ -280,13 +302,65 @@ MAP_JS = r"""
     const s = v >= 0 ? '+' : '';
     return s + v.toFixed(2);
   }
+  function fmtElev(v) {
+    if (v === null || v === undefined) return 'n/a';
+    return v.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+  }
+  function fmtDepth(v) {
+    if (v === null || v === undefined) return 'n/a';
+    return v.toLocaleString(undefined, { minimumFractionDigits: 1, maximumFractionDigits: 1 });
+  }
   function gainLossClass(v) {
     if (v > 0) return 'gain';
     if (v < 0) return 'loss';
     return '';
   }
 
+  // Display levels as ft msl (elevation) or ft below ground surface (depth).
+  // Toggled per the map toolbar; popups re-read this when (re)opened.
+  let levelMode = 'msl';
+
+  // The year-type-weighted normalization breakdown — shows how the observed
+  // record becomes the normalized avg rate that colors the map.
+  function buildNormalizedSection(p) {
+    const N = window.NORM_YEAR_COUNTS || { wet: 6, an: 4, bn: 5, dry: 6, critical: 5 };
+    const totalN = Object.values(N).reduce((a, b) => a + b, 0);
+    const order = [['critical', 'Critical'], ['dry', 'Dry'], ['bn', 'Below Normal'],
+                   ['an', 'Above Normal'], ['wet', 'Wet']];
+    const rpb = p.rate_per_bucket || {};
+    const by = p.bucket_years || {};
+    let rows = '', sum = 0, anyFb = false;
+    order.forEach(([k, label]) => {
+      if (rpb[k] === undefined) return;
+      const n = N[k] || 0, rate = rpb[k], obs = by[k] || 0;
+      const contrib = rate * n;
+      sum += contrib;
+      const fb = obs === 0;
+      if (fb) anyFb = true;
+      rows += `<tr><td>${label} (×${n})${fb ? ' <span class="fb">(fb)</span>' : ''}</td>`
+            + `<td class="${gainLossClass(rate)}">${fmtSigned(Math.round(rate))}/yr</td>`
+            + `<td class="${gainLossClass(contrib)}">${fmtSigned(Math.round(contrib))}</td></tr>`;
+    });
+    const normAvg = totalN ? sum / totalN : 0;
+    const naive = totalN ? (p.cum_2025 / totalN) : 0;
+    let html = `<div class="popup-section">How the normalized rate is built</div>`;
+    if (p.late_baseline) {
+      html += `<div class="popup-note">Record starts <strong>${p.baseline_year}</strong> (${p.span_years} of ${totalN} yr), so its observed cumulative (${fmtSigned(p.cum_2025)} AF) misses pre-${p.baseline_year} drawdown — spread naively over all ${totalN} yr that is only ≈ <strong>${fmtSigned(Math.round(naive))} AF/yr</strong>. The normalized rate instead applies this polygon's own rate <em>within each water-year type</em> across the basin's full ${totalN}-yr type mix (1999–2025):</div>`;
+    } else {
+      html += `<div class="popup-note">This polygon's own rate <em>within each water-year type</em>, applied across the basin's full ${totalN}-yr type mix (1999–2025):</div>`;
+    }
+    html += `<table class="popup-calc"><thead><tr><th>Year type (× yrs)</th><th>Rate</th><th>= Contrib.</th></tr></thead><tbody>${rows}`
+          + `<tr class="total"><td>Normalized total</td><td></td><td class="${gainLossClass(sum)}">${fmtSigned(Math.round(sum))} AF</td></tr>`
+          + `<tr class="total"><td>÷ ${totalN} yr = normalized avg</td><td></td><td class="${gainLossClass(normAvg)}">${fmtSigned(Math.round(normAvg))} AF/yr</td></tr>`
+          + `</tbody></table>`;
+    if (anyFb) {
+      html += `<div class="popup-note" style="font-size:10.5px;">(fb) = year-type this polygon never observed; its overall avg rate is substituted.</div>`;
+    }
+    return html;
+  }
+
   function buildPopupHtml(p) {
+    const bgs = (levelMode === 'bgs' && p.gse !== null && p.gse !== undefined);
     let html = `<h4>${p.zone_label} (${p.ma})</h4>`;
     if (p.reassigned) {
       html += `<div class="popup-row"><span class="k">Zone (spatial)</span><span class="v" style="color:#7c4a86;">${p.ma_full} — reassigned from ${p.workbook_ma}</span></div>`;
@@ -299,27 +373,71 @@ MAP_JS = r"""
     }
     html += `<div class="popup-row"><span class="k">Area</span><span class="v">${p.area_ac.toLocaleString()} ac</span></div>`;
     html += `<div class="popup-row"><span class="k">Span</span><span class="v">${p.baseline_year}–${p.endpoint_year} (${p.span_years} yr)</span></div>`;
-    html += `<div class="popup-row"><span class="k">Avg ΔGWE/yr</span><span class="v ${gainLossClass(p.avg_dgwe)}">${fmtSignedFt(p.avg_dgwe)} ft</span></div>`;
-    html += `<div class="popup-row"><span class="k">Cumulative ΔStorage</span><span class="v ${gainLossClass(p.cum_2025)}">${fmtSigned(p.cum_2025)} AF</span></div>`;
-    html += `<div class="popup-row"><span class="k">Avg storage rate</span><span class="v ${gainLossClass(p.avg_rate)}">${fmtSigned(p.avg_rate)} AF/yr</span></div>`;
-    html += `<div class="popup-row"><span class="k">Normalized cum 2025</span><span class="v ${gainLossClass(p.norm_cum)}">${fmtSigned(p.norm_cum)} AF</span></div>`;
-    html += `<div class="popup-row"><span class="k">Critical+Dry share of drawdown</span><span class="v">${Math.round(p.crit_dry_share)}%</span></div>`;
-    html += `<div class="popup-section">By Sac Valley Index year type</div>`;
-    html += `<div class="popup-row"><span class="k">Wet</span><span class="v ${gainLossClass(p.buckets.wet)}">${fmtSigned(p.buckets.wet)} AF</span></div>`;
-    html += `<div class="popup-row"><span class="k">Above Normal</span><span class="v ${gainLossClass(p.buckets.an)}">${fmtSigned(p.buckets.an)} AF</span></div>`;
-    html += `<div class="popup-row"><span class="k">Below Normal</span><span class="v ${gainLossClass(p.buckets.bn)}">${fmtSigned(p.buckets.bn)} AF</span></div>`;
-    html += `<div class="popup-row"><span class="k">Dry</span><span class="v ${gainLossClass(p.buckets.dry)}">${fmtSigned(p.buckets.dry)} AF</span></div>`;
-    html += `<div class="popup-row"><span class="k">Critical</span><span class="v ${gainLossClass(p.buckets.critical)}">${fmtSigned(p.buckets.critical)} AF</span></div>`;
-    const syExtra = p.sy_source === 'SVSim' ? '' : ' <span style="color:#8a5a18;font-style:italic;font-size:11px;">(basin-mean fallback)</span>';
-    html += `<div class="popup-row"><span class="k">Specific yield</span><span class="v">${p.sy.toFixed(4)}${syExtra}</span></div>`;
-    if (p.late_baseline) {
-      html += `<div class="popup-late">Late baseline: this polygon's RMS well wasn't measured in 1999, so its record starts at ${p.baseline_year}. Pre-${p.baseline_year} drawdown is not captured.</div>`;
+
+    // Specific yield + borehole provenance (measured, not assigned)
+    html += `<div class="popup-row"><span class="k">Specific yield (S<sub>y</sub>)</span><span class="v">${p.sy.toFixed(4)}</span></div>`;
+    const totBh = (window.TOTAL_BOREHOLES || 0).toLocaleString();
+    if (p.sy_source === 'SVSim') {
+      html += `<div class="popup-note">Derived from <strong>${p.n_boreholes} boreholes</strong> in this polygon (${p.n_boreholes_valid} with ≥200 ft of logged lithology) — measured sediment texture, not an assigned constant. Basin-wide, ${totBh} boreholes inform the per-polygon S<sub>y</sub> values.</div>`;
+    } else {
+      html += `<div class="popup-note"><span class="fb" style="color:#8a5a18;font-style:italic;">Basin-mean fallback:</span> only ${p.n_boreholes} borehole(s) fall in this polygon (${p.n_boreholes_valid} with ≥200 ft logged) — too few for a polygon-specific S<sub>y</sub>, so the basin area-weighted mean is used.</div>`;
     }
+
+    // Level section (elevation ft msl, or depth ft below ground) + storage formula
+    const dElev = (p.endpoint_gwe !== null && p.baseline_gwe !== null) ? (p.endpoint_gwe - p.baseline_gwe) : null;
+    if (bgs) {
+      const dBase = p.gse - p.baseline_gwe;   // depth to water at baseline
+      const dEnd = p.gse - p.endpoint_gwe;    // depth to water at endpoint
+      const dDepth = (dEnd !== null && dBase !== null) ? (dEnd - dBase) : null;  // + = deeper = loss
+      html += `<div class="popup-section">Depth to water (ft below ground)</div>`;
+      html += `<div class="popup-row"><span class="k">Starting depth (${p.baseline_year})</span><span class="v">${fmtDepth(dBase)} ft</span></div>`;
+      html += `<div class="popup-row"><span class="k">Ending depth (${p.endpoint_year})</span><span class="v">${fmtDepth(dEnd)} ft</span></div>`;
+      html += `<div class="popup-row"><span class="k">Change in depth</span><span class="v ${gainLossClass(dElev)}">${fmtSignedFt(dDepth)} ft</span></div>`;
+      if (dElev !== null) {
+        const dStor = dElev * p.area_ac * p.sy;
+        html += `<div class="popup-formula">`
+              + `change in storage = −(Δdepth) × area × S<sub>y</sub><br>`
+              + `&nbsp;= −(${fmtSignedFt(dDepth)} ft) × ${p.area_ac.toLocaleString()} ac × ${p.sy.toFixed(4)}<br>`
+              + `&nbsp;= <strong class="${gainLossClass(dStor)}">${fmtSigned(dStor)} AF</strong>`
+              + ` <span style="color:#5b5547;">(cumulative, observed)</span></div>`;
+      }
+    } else {
+      html += `<div class="popup-section">Groundwater elevation (ft msl)</div>`;
+      html += `<div class="popup-row"><span class="k">Starting elevation (${p.baseline_year})</span><span class="v">${fmtElev(p.baseline_gwe)} ft</span></div>`;
+      html += `<div class="popup-row"><span class="k">Ending elevation (${p.endpoint_year})</span><span class="v">${fmtElev(p.endpoint_gwe)} ft</span></div>`;
+      html += `<div class="popup-row"><span class="k">Change in elevation</span><span class="v ${gainLossClass(dElev)}">${fmtSignedFt(dElev)} ft</span></div>`;
+      if (dElev !== null) {
+        const dStor = dElev * p.area_ac * p.sy;
+        html += `<div class="popup-formula">`
+              + `change in storage = Δelev × area × S<sub>y</sub><br>`
+              + `&nbsp;= ${fmtSignedFt(dElev)} ft × ${p.area_ac.toLocaleString()} ac × ${p.sy.toFixed(4)}<br>`
+              + `&nbsp;= <strong class="${gainLossClass(dStor)}">${fmtSigned(dStor)} AF</strong>`
+              + ` <span style="color:#5b5547;">(cumulative, observed)</span></div>`;
+      }
+    }
+
+    // Observed avg rate (the simple cumulative ÷ span)
+    html += `<div class="popup-row"><span class="k">Observed avg rate (cum ÷ ${p.span_years} yr)</span><span class="v ${gainLossClass(p.avg_rate)}">${fmtSigned(p.avg_rate)} AF/yr</span></div>`;
+
+    // Normalized average storage rate — the value that colors the map
+    html += `<div class="popup-rate"><span class="k" style="font-size:11px;text-transform:uppercase;letter-spacing:0.03em;color:#5b5547;font-weight:700;">Normalized avg storage rate</span>`
+          + `<span class="big ${gainLossClass(p.norm_avg)}">${fmtSigned(p.norm_avg)} AF/yr</span>`
+          + `<span style="font-size:11px;color:#5b5547;">This is the value used to color the polygon on the map.</span></div>`;
+
+    // …and how that normalized rate is derived
+    html += buildNormalizedSection(p);
+
     return html;
   }
 
   function sectionLabel(zone) {
+    if (/chico/i.test(zone)) return 'Chico';
     return zone.length >= 11 ? zone.substring(6, 11) : zone;
+  }
+  // Second label line: the polygon's avg normalized storage rate (AF/yr).
+  function rateLabel(v) {
+    if (v === null || v === undefined) return 'n/a';
+    return fmtSigned(v) + ' AF/yr';
   }
 
   const MAPS = {};
@@ -357,21 +475,34 @@ MAP_JS = r"""
         fillOpacity: 0.82,
       });
       poly._meta = p;
-      poly.bindPopup(buildPopupHtml(p), { maxWidth: 380, autoPan: true });
+      poly.bindPopup(() => buildPopupHtml(p), { maxWidth: 380, autoPan: true });
       poly.on('mouseover', function() { this.setStyle({ weight: 2.4 }); this.bringToFront(); });
       poly.on('mouseout', function() {
         if (!this._isFlashing) this.setStyle({ weight: 0.8, color: '#332e22' });
       });
       polyLayer.addLayer(poly);
 
-      // Centroid label
-      const ll = poly.getBounds().getCenter();
+      // Label — two values: section label + avg normalized rate.
+      // Anchor at the polygon's RMS well, NOT the bounding-box center.  For
+      // reassigned cells (22N01E20K001M, 22N01E09B001M) whose Voronoi cells
+      // stretch from North across Chico, the bbox center lands in the middle
+      // of the Chico polygon; the well location keeps each label on its own
+      // polygon in North where the well actually sits.
+      let ll;
+      if (!p.is_aggregate && p.well_latlngs && p.well_latlngs.length && p.well_latlngs[0][0] !== null) {
+        ll = L.latLng(p.well_latlngs[0][0], p.well_latlngs[0][1]);
+      } else if (p.seed_latlng && p.seed_latlng[0] !== null) {
+        ll = L.latLng(p.seed_latlng[0], p.seed_latlng[1]);
+      } else {
+        ll = poly.getBounds().getCenter();
+      }
       const label = L.marker(ll, {
         icon: L.divIcon({
           className: 'polygon-label-wrap',
-          html: `<div class="polygon-label">${sectionLabel(p.zone_label)}</div>`,
-          iconSize: [56, 14],
-          iconAnchor: [28, 7],
+          html: `<div class="polygon-label"><span class="pl-name">${sectionLabel(p.zone_label)}</span>`
+              + `<span class="pl-rate ${gainLossClass(p.norm_avg) || 'zero'}">${rateLabel(p.norm_avg)}</span></div>`,
+          iconSize: [78, 28],
+          iconAnchor: [39, 30],
         }),
         interactive: false,
       });
@@ -400,6 +531,7 @@ MAP_JS = r"""
     const basemapSelect = document.getElementById(`basemap-select-${method}`);
     const fillToggle = document.getElementById(`fill-toggle-${method}`);
     const labelToggle = document.getElementById(`label-toggle-${method}`);
+    const bgsToggle = document.getElementById(`bgs-toggle-${method}`);
     if (basemapSelect) basemapSelect.addEventListener('change', () => {
       if (currentBasemap) {
         map.removeLayer(currentBasemap);
@@ -418,6 +550,13 @@ MAP_JS = r"""
     });
     if (labelToggle) labelToggle.addEventListener('change', () => {
       if (labelToggle.checked) labelLayer.addTo(map); else map.removeLayer(labelLayer);
+    });
+    if (bgsToggle) bgsToggle.addEventListener('change', () => {
+      levelMode = bgsToggle.checked ? 'bgs' : 'msl';
+      // Refresh any open popup so the level units switch live.
+      polyLayer.eachLayer(l => {
+        if (l.isPopupOpen && l.isPopupOpen()) l.setPopupContent(buildPopupHtml(l._meta));
+      });
     });
 
     MAPS[method] = { map, basemapLayers, polyLayer, labelLayer, wellLayer };
@@ -470,7 +609,7 @@ MAP_JS = r"""
     const active = document.querySelector('.method-content:not(.hidden)');
     if (active) {
       const cls = Array.from(active.classList).find(c => c.startsWith('method-') && c !== 'method-content');
-      const method = cls ? cls.replace('method-', '') : 'single';
+      const method = cls ? cls.replace('method-', '') : 'three-zone';
       const M = initMap(method);
       if (M) setTimeout(() => M.map.invalidateSize(), 80);
     }
@@ -498,7 +637,7 @@ MAP_JS = r"""
     row.title = 'Click to locate on the map';
     row.addEventListener('click', () => {
       const methodContent = row.closest('.method-content');
-      let method = 'single';
+      let method = 'three-zone';
       if (methodContent) {
         const cls = Array.from(methodContent.classList).find(c => c.startsWith('method-') && c !== 'method-content');
         if (cls) method = cls.replace('method-', '');
@@ -702,12 +841,9 @@ def _render_method_section(method, results, portfolio):
     method_pretty = METHOD_LABEL[method]
     method_summary = (
         f"<strong>{method_pretty}.</strong> "
-        + (f"All {n_polygons} polygons built as one Voronoi tessellation clipped to the basin boundary; "
-           "cells can cross management-area lines."
-           if method == "single" else
-           "Three independent Voronoi tessellations (one per management area), each clipped to "
-           "its own boundary; cells do NOT cross management-area lines.")
-        + f" {n_polygons} polygons total ({n_north} North · {n_chico} Chico · {n_south} South)."
+        "Three independent Voronoi tessellations (one per management area), each clipped to "
+        "its own boundary; cells do NOT cross management-area lines. "
+        f"{n_polygons} polygons total ({n_north} North · {n_chico} Chico · {n_south} South)."
     )
 
     return f"""<div class="method-banner">{method_summary}</div>
@@ -766,7 +902,7 @@ def _render_method_section(method, results, portfolio):
 
 <h2>Where the basin loses storage — by polygon</h2>
 
-<p>The map below colors each polygon by its <strong>average observed storage loss rate</strong> (AF/yr) across its measurement record. Light green = polygon is gaining storage; oranges → reds = magnitude of average annual loss. Click a polygon for full detail including the year-type-normalized rate.</p>
+<p>The map below colors each polygon by its <strong>average normalized storage rate</strong> (AF/yr) — the year-type-weighted rate that corrects for late-baseline drag. Dark green = gaining storage; medium and light greens = small annual losses; light yellow and orange = larger annual losses. Click a polygon to trace the change-in-storage math (starting elevation, ending elevation, and the Δelevation × area × S<sub>y</sub> calculation).</p>
 
 <div class="map-toolbar">
   <span class="map-toolbar-label">Basemap:</span>
@@ -780,27 +916,30 @@ def _render_method_section(method, results, portfolio):
   <span class="map-toolbar-label" style="margin-left:8px;">Layers:</span>
   <label class="map-toggle">
     <input type="checkbox" id="fill-toggle-{method}" checked/>
-    <span>Polygon fill (loss-rate colors)</span>
+    <span>Polygon fill (normalized-rate colors)</span>
   </label>
   <label class="map-toggle">
     <input type="checkbox" id="label-toggle-{method}" checked/>
-    <span>Section labels</span>
+    <span>Section labels (+ normalized rate)</span>
+  </label>
+  <label class="map-toggle">
+    <input type="checkbox" id="bgs-toggle-{method}"/>
+    <span>Show popup levels as depth (ft BGS)</span>
   </label>
 </div>
 <div id="map-{method}" class="leaflet-map" aria-label="Interactive polygon map for {method_pretty}"></div>
 <div class="map-legend-row">
-  <div class="map-legend-title">Polygon avg observed storage loss rate (AF/yr)</div>
+  <div class="map-legend-title">Polygon avg normalized storage rate (AF/yr) — bands upper-bound inclusive</div>
   <div class="map-legend-swatches">
-    <div><span class="sw" style="background:#a8c8b0"></span> Gaining</div>
-    <div><span class="sw" style="background:#f0d9a8"></span> Loss &lt; 250</div>
-    <div><span class="sw" style="background:#e3a76f"></span> Loss &lt; 750</div>
-    <div><span class="sw" style="background:#cb7740"></span> Loss &lt; 1,500</div>
-    <div><span class="sw" style="background:#a84a2c"></span> Loss &lt; 2,500</div>
-    <div><span class="sw" style="background:#7c2820"></span> Loss ≥ 2,500</div>
+    <div><span class="sw" style="background:#2e6f3f"></span> &gt; 0 (gaining)</div>
+    <div><span class="sw" style="background:#6b9479"></span> 0 to −100</div>
+    <div><span class="sw" style="background:#b9d3bf"></span> −100 to −250</div>
+    <div><span class="sw" style="background:#f0d9a8"></span> −250 to −750</div>
+    <div><span class="sw" style="background:#df8a3c"></span> &lt; −750</div>
     <div><span class="dot" style="background:#1f1f1f"></span> Proposed 2027 RMS well</div>
   </div>
 </div>
-<div class="figcaption">Figure 4. Click any polygon for full detail. Toggle the basemap on to see streets / parcels / hydrology under the cells; toggle the fill off to see what's underneath without re-coloring. Click any row in the tables below to fly to that polygon and flash it briefly.</div>
+<div class="figcaption">Figure 4. Polygons are colored by average normalized storage rate (AF/yr). Click any polygon for full detail, including the explicit Δelevation × area × S<sub>y</sub> storage-change calculation. Toggle a basemap on to see streets / parcels / hydrology under the cells; toggle the fill off to see what's underneath without re-coloring. Click any row in the tables below to fly to that polygon and flash it briefly.</div>
 
 <h2>Per-polygon detail (technical)</h2>
 <table>
@@ -855,31 +994,25 @@ def write_index_html(out_path, results_by_method, portfolio):
     }
     polygons_json = _json.dumps(polygons_by_method, separators=(",", ":"))
 
-    toggle_buttons = []
-    for m in ("single", "three-zone"):
-        if m in method_sections:
-            active = " active" if m == "single" else ""
-            toggle_buttons.append(
-                f'<button data-method="{m}" class="{active.strip()}">{METHOD_LABEL[m]}</button>'
-            )
-    toggle_html = (
-        '<div class="method-toggle">'
-        '<span class="method-toggle-label">Polygon method:</span>'
-        + "".join(toggle_buttons)
-        + '</div>'
-    )
+    # Constants the popup JS needs: the basin year-type mix used in the
+    # normalization, and the basin-wide borehole total (Sy provenance).
+    _r0 = next(iter(results_by_method.values()), {})
+    norm_year_counts_json = _json.dumps(_r0.get("n_by_type_full", {}))
+    total_boreholes = _r0.get("total_boreholes_basin", 0)
+    total_boreholes_valid = _r0.get("total_boreholes_valid", 0)
 
+    # Only the three-zone tessellation is analyzed now — no method toggle.
+    # Render every section present (currently just three-zone), always visible.
+    toggle_html = ""
     sections_html = []
     for m in ("single", "three-zone"):
         if m in method_sections:
-            hidden = "" if m == "single" else " hidden"
             sections_html.append(
-                f'<div class="method-content method-{m}{hidden}">'
+                f'<div class="method-content method-{m}">'
                 + method_sections[m]
                 + '</div>'
             )
 
-    # Polygon count for the subtitle; both methods produce the same count today.
     n_polygons_total = max(
         (len(r.get("polygons_for_js", [])) for r in results_by_method.values()),
         default=0,
@@ -901,15 +1034,6 @@ def write_index_html(out_path, results_by_method, portfolio):
                 '<details class="readme-section" open>'
                 '<summary>Methodology — full README</summary>'
                 '<div class="readme-content">'
-                '<div class="readme-stale-callout">'
-                '<strong>Heads-up:</strong> This README reflects the pre-revision '
-                '(28-polygon, project-portfolio) framing. Headline numbers, '
-                'polygon-count breakdowns, and project-portfolio references are '
-                'out of date as of the 2026-05-19 network revision. The '
-                'methodology sections — specific-yield computation, year-type-'
-                'weighted normalization, gap attribution, baseline anchoring — '
-                'remain accurate. See the live dashboard above for current numbers.'
-                '</div>'
                 + body +
                 '</div>'
                 '</details>'
@@ -945,8 +1069,8 @@ def write_index_html(out_path, results_by_method, portfolio):
 {readme_html}
 
 <div class="footer">
-<p><strong>Files in this folder.</strong> <code>index.html</code> (this page) · <code>data/condition_analysis_{{single,three_zone}}.json</code> · <code>data/sustainability_2042_{{single,three_zone}}.json</code> · <code>data/basin_annual_{{single,three_zone}}.json</code> (observed + normalized) · <code>data/model_data_{{single,three_zone}}.json</code> · <code>data/polygon_storage_2025_{{single,three_zone}}.csv</code> · <code>data/storage_timeseries_{{single,three_zone}}.csv</code> · <code>data/polygon_sy_svsim_{{single,three_zone}}.csv</code> · <code>data/project_portfolio.json</code> (editable input) · per-method SVGs (<code>polygon_map_*.svg</code>, <code>basin_buckets_chart_*.svg</code>, <code>basin_cumulative_chart_*.svg</code>, <code>storage_context_*.svg</code>).</p>
-<p><strong>Upstream.</strong> Polygons, wells, and DWR periodic GWL measurements come from the companion <a href="https://agubc-vina.github.io/2027-BC-prop-network/">2027-BC-prop-network</a> framework — both <code>polygons-data-single.js</code> (single basin-wide tessellation) and <code>polygons-data-three-zone.js</code> (three independent tessellations per management area) are read here.</p>
+<p><strong>Files in this folder.</strong> <code>index.html</code> (this page) · <code>data/condition_analysis_three_zone.json</code> · <code>data/sustainability_2042_three_zone.json</code> · <code>data/basin_annual_three_zone.json</code> (observed + normalized) · <code>data/model_data_three_zone.json</code> · <code>data/polygon_storage_2025_three_zone.csv</code> · <code>data/storage_timeseries_three_zone.csv</code> · <code>data/polygon_sy_svsim_three_zone.csv</code> · per-method SVGs (<code>polygon_map_three_zone.svg</code>, <code>basin_buckets_chart_three_zone.svg</code>, <code>basin_cumulative_chart_three_zone.svg</code>, <code>storage_context_three_zone.svg</code>).</p>
+<p><strong>Upstream.</strong> Polygons, wells, and DWR periodic GWL measurements come from the companion <a href="https://agubc-vina.github.io/2027-BC-prop-network/">2027-BC-prop-network</a> framework — <code>polygons-data-three-zone.js</code> (three independent tessellations per management area) is read here.</p>
 <p><strong>Status.</strong> Independent analysis prepared for AGUBC technical staff and Board. Comments and corrections welcomed.</p>
 </div>
 
@@ -954,6 +1078,9 @@ def write_index_html(out_path, results_by_method, portfolio):
 
 <script>
 window.POLYGONS_BY_METHOD = {polygons_json};
+window.NORM_YEAR_COUNTS = {norm_year_counts_json};
+window.TOTAL_BOREHOLES = {total_boreholes};
+window.TOTAL_BOREHOLES_VALID = {total_boreholes_valid};
 </script>
 <script>{MAP_JS}</script>
 
