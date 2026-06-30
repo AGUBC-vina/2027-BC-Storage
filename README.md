@@ -61,18 +61,19 @@ Year-type classification uses DWR's official **Sacramento Valley Index**
 ## The polygon set
 
 The 2027 BC RMS network is **26 polygons** in the three-zone tessellation:
-**13 Vina-North, 1 Vina-Chico (aggregate), 12 Vina-South**. Polygons are
-clipped to the DWR B118 Vina Subbasin boundary and projected through
-EPSG:3310 (NAD-83 California Albers Equal Area). The roster comes from the
-`2027-BC-prop-network` build, tied to the `2027 GWL RMS?` column of the
-network workbook.
+**13 Vina-North, 1 Vina-Chico (aggregate), 12 Vina-South**, with **29 RMS
+wells** in total. Polygons are clipped to the DWR B118 Vina Subbasin boundary
+and projected through EPSG:3310 (NAD-83 California Albers Equal Area). The
+roster comes from the `2027-BC-prop-network` build, tied to the
+`2027 GWL RMS?` column of the network workbook.
 
 **Chico is a single aggregate polygon.** Rather than splitting Chico into
 separate Voronoi cells, the Chico management area is one dissolved polygon
 whose groundwater elevation is the composite of **10 nested well completions**
-(`CWSCH01b` as the primary RMS site plus 9 supplemental completions, including
-the `22N01E28J` cluster). Storage for Chico uses that composite elevation
-against the dissolved polygon's full area.
+(`CWSCH01b`, `CWSCH02`, `CWSCH03`, and `CWSCH07` as the four RMS sites plus 6
+supplemental completions, including the `22N01E28J` cluster). Storage for
+Chico uses that composite elevation against the dissolved polygon's full
+area.
 
 **Spatial reassignment.** Each seed well is assigned to a management area by
 spatial containment in the management-area boundary polygons, not by its
