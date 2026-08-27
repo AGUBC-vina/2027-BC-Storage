@@ -591,7 +591,7 @@ range.</p>
   drought-year-weighted normalized rate is <strong>−371 AF/yr</strong>, because its record
   misses the pre-2019 drawdown that the year-type weighting restores.</li>
 </ul>
-<p>Basemaps (CartoDB Positron, Esri World Topo, Esri World Imagery satellite, and
+<p>Basemaps (Esri Light Gray Canvas, Esri World Topo, Esri World Imagery satellite, and
 OpenStreetMap) can be toggled under the map; the proposed 2027 RMS well
 locations are shown as small dots (10 for the Chico aggregate, one for each
 other polygon).</p>
@@ -730,7 +730,7 @@ technical staff and AGUBC Board members. Comments and corrections welcomed.</p><
   <span class="map-toolbar-label">Basemap:</span>
   <select class="map-basemap-select" id="basemap-select-three-zone">
     <option value="none" selected>None</option>
-    <option value="carto">CartoDB Positron</option>
+    <option value="carto">Light Gray (Esri)</option>
     <option value="esri-topo">Esri World Topo</option>
     <option value="esri-sat">Satellite (Esri World Imagery)</option>
     <option value="osm">OpenStreetMap</option>
@@ -1287,12 +1287,16 @@ window.TOTAL_BOREHOLES_VALID = 80;
   }
 
   const BASEMAPS = {
+    // Esri Light Gray Canvas. Replaced CARTO 2026-08-26 — CARTO now stamps
+    // "API KEY REQUIRED" across every tile served without a key. 'labels' is the
+    // matching transparent place-name layer; see the basemapLayers builder below.
     'carto': {
-      url: 'https://{s}.basemaps.cartocdn.com/light_all/{z}/{x}/{y}{r}.png',
+      url: 'https://server.arcgisonline.com/ArcGIS/rest/services/Canvas/World_Light_Gray_Base/MapServer/tile/{z}/{y}/{x}',
+      labels: 'https://server.arcgisonline.com/ArcGIS/rest/services/Canvas/World_Light_Gray_Reference/MapServer/tile/{z}/{y}/{x}',
       options: {
-        subdomains: 'abcd',
         maxZoom: 19,
-        attribution: '&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors, &copy; <a href="https://carto.com/attributions">CARTO</a>',
+        maxNativeZoom: 16,
+        attribution: 'Tiles &copy; Esri &mdash; Esri, HERE, Garmin, USGS, NGA',
       },
     },
     'esri-topo': {
@@ -1486,7 +1490,10 @@ window.TOTAL_BOREHOLES_VALID = 80;
     // Build all available basemap layers up-front; only one is added at a time.
     const basemapLayers = {};
     Object.entries(BASEMAPS).forEach(([key, def]) => {
-      basemapLayers[key] = L.tileLayer(def.url, def.options);
+      const base = L.tileLayer(def.url, def.options);
+      basemapLayers[key] = def.labels
+        ? L.layerGroup([base, L.tileLayer(def.labels, def.options)])
+        : base;
     });
     let currentBasemap = null;
 
@@ -1570,7 +1577,7 @@ window.TOTAL_BOREHOLES_VALID = 80;
         currentBasemap = basemapLayers[key];
         currentBasemap.addTo(map);
         // Keep polygons / labels / wells on top.
-        currentBasemap.bringToBack();
+        if (currentBasemap.bringToBack) currentBasemap.bringToBack();
       }
     });
     if (fillToggle) fillToggle.addEventListener('change', () => {
