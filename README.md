@@ -3,6 +3,8 @@
 A drought-conditioned look at groundwater storage in the Vina Subbasin,
 prepared by **AGUBC** for the Vina GSA technical group and AGUBC Board.
 
+> **Merged site (2026-09-04).** This dashboard and the 2027 RMS network dashboard are combined into one page for Vina GSA staff at https://agubc-vina.github.io/2027-unified-vina-dashboard/ (thresholds from the 2026-08-12 joint board packet; change in storage on hand measurements with storage coefficient 0.10 and SVSim specific yield as a sensitivity case). This dashboard stays as built.
+
 The polygons, RMS wells, and DWR periodic GWL measurements all come from the
 companion
 [2027-BC-prop-network](https://agubc-vina.github.io/2027-BC-prop-network/)
@@ -113,7 +115,7 @@ change in storage = −23.07 ft × 29,718 ac × 0.0958 = −65,681 AF (cumulativ
   from the actual coarse/fine sediment fractions logged in the boreholes that
   fall inside it: **230 boreholes lie within the basin** (80 of them with
   ≥200 ft of logged lithology), and polygon Sy values range **0.0594 to
-  0.1172** (basin area-weighted mean ≈ 0.087) — real spatial variation that a
+  0.1172** (basin area-weighted mean 0.0856) — real spatial variation that a
   single assigned number would erase. The per-polygon popup shows exactly how
   many boreholes back each Sy. Three polygons with too few boreholes
   (`23N01E29P002M`, `22N01E09B001M`, `21N01E25K001M`) fall back to the basin

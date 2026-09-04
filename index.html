@@ -363,7 +363,7 @@ when you click a polygon on the map. For example, the Chico aggregate:</p>
   from the actual coarse/fine sediment fractions logged in the boreholes that
   fall inside it: <strong>230 boreholes lie within the basin</strong> (80 of them with
   ≥200 ft of logged lithology), and polygon Sy values range <strong>0.0594 to
-  0.1172</strong> (basin area-weighted mean ≈ 0.087) — real spatial variation that a
+  0.1172</strong> (basin area-weighted mean 0.0856) — real spatial variation that a
   single assigned number would erase. The per-polygon popup shows exactly how
   many boreholes back each Sy. Three polygons with too few boreholes
   (<code>23N01E29P002M</code>, <code>22N01E09B001M</code>, <code>21N01E25K001M</code>) fall back to the basin
@@ -898,7 +898,7 @@ technical staff and AGUBC Board members. Comments and corrections welcomed.</p><
 <details><summary>Method in brief (formula, S<sub>y</sub>, year types, baseline years)</summary>
 <p>Per polygon: ΔStorage<sub>p,y</sub> = (GWE<sub>p,y</sub> − GWE<sub>p,baseline</sub>) × Sy<sub>p</sub> × Area<sub>p</sub>. GWE<sub>p,y</sub> is the polygon's 2027 GWL RMS well's spring composite (March mean for SWN-named wells), Good-quality DWR records only. Each polygon is anchored to WY 1999 if it has a Good spring composite that year; otherwise to the polygon's first observation after 1999. We then take the per-polygon cumulative storage time series, compute year-over-year deltas (distributing multi-year DWR gaps evenly), and bucket each year by its <strong>official Sacramento Valley Index water-year type</strong>.</p>
 
-<p><strong>Specific yield is polygon-by-polygon</strong>, derived from DWR's SVSim Texture Data (Sacramento Valley Simulation Model v1.0). Coarse-grained sediments → Sy = 0.15, fine-grained → Sy = 0.05, area-weighted by borehole lithology in the 0–500 ft below ground surface analysis window. Polygon Sy values range <strong>0.0594</strong> to <strong>0.1172</strong>; basin area-weighted mean ≈ 0.087.</p>
+<p><strong>Specific yield is polygon-by-polygon</strong>, derived from DWR's SVSim Texture Data (Sacramento Valley Simulation Model v1.0). Coarse-grained sediments → Sy = 0.15, fine-grained → Sy = 0.05, area-weighted by borehole lithology in the 0–500 ft below ground surface analysis window. Polygon Sy values range <strong>0.0594</strong> to <strong>0.1172</strong>; basin area-weighted mean 0.0856.</p>
 
 <p style="font-size:13px;color:var(--ink-muted);">3 polygons (23N01E29P002M, 22N01E09B001M, 21N01E25K001M) have insufficient SVSim borehole coverage and use the basin area-weighted mean as a Sy fallback. Flagged with "(mean)" in the table.</p>
 
