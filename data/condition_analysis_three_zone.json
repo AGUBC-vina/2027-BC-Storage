@@ -1,5 +1,5 @@
 {
-  "year_type_classification": "Sacramento Valley Index (Northern Sierra 8-Station Index)",
+  "year_type_classification": "Sacramento Valley Index (runoff-based, CDEC report WSIHIST)",
   "year_types_by_year": {
     "1999": "Wet",
     "2000": "Above Normal",

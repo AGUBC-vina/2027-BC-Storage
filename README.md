@@ -57,8 +57,8 @@ registered an undesirable result.
 | Critical                   | 5     | **−246,394**        | −49,279      |
 | Net basin (WY 1999–2025)   | 26    | **−198,094**        | —            |
 
-Year-type classification uses DWR's official **Sacramento Valley Index**
-(Northern Sierra 8-Station Index).
+Year-type classification uses DWR's **Sacramento Valley Index**, the
+runoff-based water-year index published in CDEC report WSIHIST.
 
 ## The polygon set
 
@@ -135,8 +135,8 @@ change in storage = −23.07 ft × 29,718 ac × 0.0958 = −65,681 AF (cumulativ
   measurements, the cumulative storage delta across the gap is distributed
   evenly across the missing years and bucketed by each year's hydrologic
   condition.
-- **Hydrologic year classification** uses DWR's official Sacramento Valley
-  Index (Northern Sierra 8-Station Index) — Wet / Above Normal / Below Normal /
+- **Hydrologic year classification** uses DWR's Sacramento Valley
+  Index (runoff-based, CDEC report WSIHIST) — Wet / Above Normal / Below Normal /
   Dry / Critical.
 
 ## Year-type-weighted normalization

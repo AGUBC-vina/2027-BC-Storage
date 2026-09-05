@@ -80,7 +80,7 @@ SOURCE_GSP_LABEL = "Vina Subbasin GSP (Dec 15, 2021), p. ES-5"
 
 SY_DEFAULT = 0.10  # fallback only — see Sy lookup loader
 
-# Sacramento Valley Index water-year types (DWR Northern Sierra 8-Station Index).
+# Sacramento Valley Index water-year types (DWR CDEC report WSIHIST, runoff-based).
 SVI_YEAR_TYPE = {
     1999: "Wet",            2000: "Above Normal",   2001: "Dry",
     2002: "Dry",            2003: "Above Normal",   2004: "Below Normal",
@@ -956,7 +956,7 @@ def compute_method(method, wells_meta, meas, portfolio):
 
     # --- write JSON outputs --------------------------------------------
     condition_out = {
-        "year_type_classification": "Sacramento Valley Index (Northern Sierra 8-Station Index)",
+        "year_type_classification": "Sacramento Valley Index (runoff-based, CDEC report WSIHIST)",
         "year_types_by_year": SVI_YEAR_TYPE,
         "polygons": [
             {k: v for k, v in s.items()

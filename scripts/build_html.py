@@ -879,7 +879,7 @@ def _render_method_section(method, results, portfolio):
 
 <p style="font-size:13px;color:var(--ink-muted);">{len(fallback_polys)} polygon{"s" if len(fallback_polys) != 1 else ""} ({fallback_summary}) have insufficient SVSim borehole coverage and use the basin area-weighted mean as a Sy fallback. Flagged with "(mean)" in the table.</p>
 
-<p>Year-type classification uses DWR's Sacramento Valley Index (Northern Sierra 8-Station Index):</p>
+<p>Year-type classification uses DWR's Sacramento Valley Index (runoff-based, CDEC report WSIHIST):</p>
 <ul>
 {chr(10).join(svi_years_listing)}
 </ul>
