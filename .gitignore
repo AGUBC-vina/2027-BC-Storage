@@ -10,3 +10,6 @@ raw/
 # Python
 __pycache__/
 *.pyc
+
+# Working notes stay local
+PROJECT_NOTES.md
